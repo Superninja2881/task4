@@ -1,0 +1,143 @@
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <unordered_map>
+#include <list>
+#include <vector>
+#include <bitset>
+#include <cstdlib>
+#include <ctime>
+
+std::string binaryToHex(const std::string& binary) {
+    static const char* hexChars = "0123456789ABCDEF";
+    std::string hex;
+    for (size_t i = 0; i < binary.length(); i += 4) {
+        int value = std::stoi(binary.substr(i, 4), nullptr, 2);
+        hex.push_back(hexChars[value]);
+    }
+    return hex;
+}
+
+std::string hexToBinary(const std::string& hex, size_t binaryLength) {
+    std::string binary;
+    for (char c : hex) {
+        int value = std::stoi(std::string(1, c), nullptr, 16);
+        std::string binaryChunk = std::bitset<4>(value).to_string();
+        binary.append(binaryChunk);
+    }
+    return binary.substr(0, binaryLength);
+}
+
+class LRUCache {
+private:
+    size_t maxSize;
+    std::list<std::pair<std::string, std::string>> cacheList;
+    std::unordered_map<std::string, std::list<std::pair<std::string, std::string>>::iterator> cacheMap;
+
+public:
+    LRUCache(size_t size) : maxSize(size) {}
+
+    void put(const std::string& key, const std::string& value) {
+        auto it = cacheMap.find(key);
+        if (it != cacheMap.end()) {
+            cacheList.erase(it->second);
+            cacheMap.erase(it);
+        }
+        cacheList.push_front({key, value});
+        cacheMap[key] = cacheList.begin();
+
+        if (cacheMap.size() > maxSize) {
+            auto last = cacheList.end();
+            last--;
+            cacheMap.erase(last->first);
+            cacheList.pop_back();
+        }
+    }
+
+    std::string get(const std::string& key) {
+        auto it = cacheMap.find(key);
+        if (it == cacheMap.end()) {
+            return "";
+        }
+        cacheList.splice(cacheList.begin(), cacheList, it->second);
+        return it->second->second;
+    }
+
+    bool contains(const std::string& key) {
+        return cacheMap.find(key) != cacheMap.end();
+    }
+};
+
+void compressMatInToMatInX(const std::string& inputFile, const std::string& outputFile, size_t cacheSize) {
+    std::ifstream infile(inputFile);
+    std::ofstream outfile(outputFile);
+    LRUCache cache(cacheSize);
+
+    std::string line;
+    while (std::getline(infile, line)) {
+        std::stringstream ss(line);
+        std::string matrixSize, binaryStr;
+        std::getline(ss, matrixSize, ':');
+        std::getline(ss, binaryStr);
+
+        std::string hexStr;
+        if (cache.contains(binaryStr)) {
+            hexStr = cache.get(binaryStr);
+        } else {
+            hexStr = binaryToHex(binaryStr);
+            cache.put(binaryStr, hexStr);
+        }
+
+        outfile << matrixSize << ":" << hexStr << "\n";
+    }
+}
+
+
+void decompressMatInXToMatIn(const std::string& inputFile, const std::string& outputFile, size_t cacheSize) {
+    std::ifstream infile(inputFile);
+    std::ofstream outfile(outputFile);
+    LRUCache cache(cacheSize);
+
+    std::string line;
+    while (std::getline(infile, line)) {
+        std::stringstream ss(line);
+        std::string matrixSize, hexStr;
+        std::getline(ss, matrixSize, ':');
+        std::getline(ss, hexStr);
+
+        size_t rows, cols;
+        sscanf(matrixSize.c_str(), "%zux%zu", &rows, &cols);
+        size_t binaryLength = rows * cols;
+
+        std::string binaryStr;
+        if (cache.contains(hexStr)) {
+            binaryStr = cache.get(hexStr);
+        } else {
+            binaryStr = hexToBinary(hexStr, binaryLength);
+            cache.put(hexStr, binaryStr);
+        }
+
+        outfile << matrixSize << ":" << binaryStr << "\n";
+    }
+}
+
+int main() {
+    size_t numLines = 100000;
+    size_t rowSize = 5;
+    size_t colSize = 5;
+    size_t cacheSize = 1000;
+
+    // Generate test file
+    std::string inputFile = "large_mat.in";
+    std::string compressedFile = "large_mat.in.x";
+    std::string decompressedFile = "large_mat.in.decompressed";
+
+
+    compressMatInToMatInX(inputFile, compressedFile, cacheSize);
+
+    decompressMatInXToMatIn(compressedFile, decompressedFile, cacheSize);
+
+    std::cout << "Compression and decompression completed." << std::endl;
+
+    return 0;
+}
